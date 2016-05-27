@@ -84,6 +84,7 @@ case class PartitionProject(projectList: Seq[Expression], child: SparkPlan) exte
 
   def execute() = {
     child.execute().mapPartitions(generateIterator)
+    //CacheProject(projectList, child).execute()
   }
 
   /**
@@ -98,18 +99,22 @@ case class PartitionProject(projectList: Seq[Expression], child: SparkPlan) exte
     // This is the key generator for the course-grained external hashing.
     val keyGenerator = CS143Utils.getNewProjection(projectList, child.output)
 
-    // IMPLEMENT ME
+    val relation = DiskHashedRelation(input, keyGenerator)
+    var partitionIt = relation.getIterator
+    var data: Iterator[Row] = Seq[Row]().iterator
 
     new Iterator[Row] {
+      var partition: DiskPartition = null
+      var rowIt: Iterator[Row] = null
+
       def hasNext() = {
-        // IMPLEMENT ME
-        false
+        if (data == null || !(data.hasNext)) fetchNextPartition
+	else data.hasNext
       }
 
       def next() = {
-        // IMPLEMENT ME
-        null
-      }
+        data.next
+      }     
 
       /**
        * This fetches the next partition over which we will iterate or returns false if there are no more partitions
@@ -118,8 +123,11 @@ case class PartitionProject(projectList: Seq[Expression], child: SparkPlan) exte
        * @return
        */
       private def fetchNextPartition(): Boolean  = {
-        // IMPLEMENT ME
-        false
+        if (partitionIt.hasNext) {
+	  data = CS143Utils.generateCachingIterator(projectList, child.output)(partitionIt.next().getData)
+	  true
+	}
+        else false
       }
     }
   }
